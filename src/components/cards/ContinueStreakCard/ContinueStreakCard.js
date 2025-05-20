@@ -4,11 +4,13 @@ import { createSafeId, positionTooltip, setupTooltipCloseHandler } from '../../u
 
 /**
  * ContinueStreakCard - Shows players who are likely to continue their hitting streaks
+ * Enhanced with integrated team logos
  */
 const ContinueStreakCard = ({ 
   hitStreakData,
   isLoading,
-  currentDate 
+  currentDate,
+  teams
 }) => {
   const [activeTooltip, setActiveTooltip] = useState(null);
 
@@ -38,7 +40,8 @@ const ContinueStreakCard = ({
       );
     }
   };
-
+  
+  
   return (
     <div className="card continue-streak-card">
       <h3>Streaks Likely to Continue</h3>
@@ -50,10 +53,28 @@ const ContinueStreakCard = ({
             {hitStreakData.likelyToContinueStreak.slice(0, 10).map((player, index) => {
               const safeId = createSafeId(player.name, player.team);
               const tooltipId = `continue_streak_${safeId}`;
+              // Get team logo URL if teams data is available
+              const teamAbbr = player.team;
+              const teamData = teams && teamAbbr ? teams[teamAbbr] : null;
+              const logoUrl = teamData ? teamData.logoUrl : null;
               
               return (
                 <li key={index} className="player-item">
-                  <div className="player-rank">{index + 1}</div>
+                  <div className="player-rank">
+                    {logoUrl && (
+                      <>
+                        <img 
+                          src={logoUrl} 
+                          alt="" 
+                          className="rank-logo" 
+                          loading="lazy"
+                          aria-hidden="true"
+                        />
+                        <div className="rank-overlay"></div>
+                      </>
+                    )}
+                    <span className="rank-number">{index + 1}</span>
+                  </div>
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
                     <span className="player-team">{player.team}</span>
@@ -83,6 +104,17 @@ const ContinueStreakCard = ({
                     <small>Continue: {(player.continuationProbability * 100).toFixed(1)}%</small>
                     <small>Best streak: {player.longestHitStreak} games</small>
                   </div>
+                  
+                  {/* Enhanced background logo */}
+                  {logoUrl && (
+                    <img 
+                      src={logoUrl} 
+                      alt="" 
+                      className="team-logo-bg" 
+                      loading="lazy"
+                      aria-hidden="true"
+                    />
+                  )}
                 </li>
               );
             })}
@@ -92,7 +124,7 @@ const ContinueStreakCard = ({
         <p className="no-data">No notable streaks likely to continue</p>
       )}
 
-      {/* Tooltips rendered outside card to avoid clipping */}
+      {/* Tooltips rendered outside card to avoid clipping - keep as is */}
       {activeTooltip && activeTooltip.startsWith('continue_streak_') && (
         <>
           {hitStreakData.likelyToContinueStreak.slice(0, 10).map((player) => {

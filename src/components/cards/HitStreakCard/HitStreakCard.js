@@ -4,12 +4,13 @@ import { createSafeId, positionTooltip, setupTooltipCloseHandler } from '../../u
 
 /**
  * HitStreakCard - Shows players with active hit streaks
- * Fixed to properly handle tooltips and display complete streak stats
+ * Enhanced with integrated team logos
  */
 const HitStreakCard = ({ 
   hitStreakData,
   isLoading,
-  currentDate 
+  currentDate,
+  teams
 }) => {
   const [activeTooltip, setActiveTooltip] = useState(null);
 
@@ -52,9 +53,28 @@ const HitStreakCard = ({
               const safeId = createSafeId(player.name, player.team);
               const tooltipId = `streak_hit_${safeId}`;
               
+              // Get team logo URL if teams data is available
+              const teamAbbr = player.team;
+              const teamData = teams && teamAbbr ? teams[teamAbbr] : null;
+              const logoUrl = teamData ? teamData.logoUrl : null;
+              
               return (
                 <li key={index} className="player-item streak-item">
-                  <div className="player-rank">{index + 1}</div>
+                  <div className="player-rank">
+                    {logoUrl && (
+                      <>
+                        <img 
+                          src={logoUrl} 
+                          alt="" 
+                          className="rank-logo" 
+                          loading="lazy"
+                          aria-hidden="true"
+                        />
+                        <div className="rank-overlay"></div>
+                      </>
+                    )}
+                    <span className="rank-number">{index + 1}</span>
+                  </div>
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
                     <span className="player-team">{player.team}</span>
@@ -82,6 +102,17 @@ const HitStreakCard = ({
                     <small>Avg streak: {player.avgHitStreakLength.toFixed(1)}</small>
                     <small>Continue: {(player.continuationProbability * 100).toFixed(1)}%</small>
                   </div>
+                  
+                  {/* Enhanced background logo */}
+                  {logoUrl && (
+                    <img 
+                      src={logoUrl} 
+                      alt="" 
+                      className="team-logo-bg" 
+                      loading="lazy"
+                      aria-hidden="true"
+                    />
+                  )}
                 </li>
               );
             })}
@@ -91,7 +122,7 @@ const HitStreakCard = ({
         <p className="no-data">No active hitting streaks</p>
       )}
 
-      {/* Tooltips rendered outside card to avoid clipping */}
+      {/* Tooltips rendered outside card to avoid clipping - keep this unchanged */}
       {activeTooltip && activeTooltip.startsWith('streak_hit_') && (
         <>
           {hitStreakData.hitStreaks.slice(0, 10).map((player) => {

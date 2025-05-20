@@ -4,11 +4,13 @@ import { createSafeId, positionTooltip, setupTooltipCloseHandler } from '../../u
 
 /**
  * LikelyToHitCard - Shows players who are likely to get a hit in their next game
+ * Enhanced with integrated team logos
  */
 const LikelyToHitCard = ({ 
   hitStreakData,
   isLoading,
-  currentDate 
+  currentDate,
+  teams
 }) => {
   const [activeTooltip, setActiveTooltip] = useState(null);
 
@@ -51,9 +53,28 @@ const LikelyToHitCard = ({
               const safeId = createSafeId(player.name, player.team);
               const tooltipId = `likely_hit_${safeId}`;
               
+              // Get team logo URL if teams data is available
+              const teamAbbr = player.team;
+              const teamData = teams && teamAbbr ? teams[teamAbbr] : null;
+              const logoUrl = teamData ? teamData.logoUrl : null;
+              
               return (
                 <li key={index} className="player-item">
-                  <div className="player-rank">{index + 1}</div>
+                  <div className="player-rank">
+                    {logoUrl && (
+                      <>
+                        <img 
+                          src={logoUrl} 
+                          alt="" 
+                          className="rank-logo" 
+                          loading="lazy"
+                          aria-hidden="true"
+                        />
+                        <div className="rank-overlay"></div>
+                      </>
+                    )}
+                    <span className="rank-number">{index + 1}</span>
+                  </div>
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
                     <span className="player-team">{player.team}</span>
@@ -83,6 +104,17 @@ const LikelyToHitCard = ({
                     <small>Next game hit: {(player.streakEndProbability * 100).toFixed(1)}%</small>
                     <small>Max drought: {player.longestNoHitStreak} games</small>
                   </div>
+                  
+                  {/* Enhanced background logo */}
+                  {logoUrl && (
+                    <img 
+                      src={logoUrl} 
+                      alt="" 
+                      className="team-logo-bg" 
+                      loading="lazy"
+                      aria-hidden="true"
+                    />
+                  )}
                 </li>
               );
             })}
@@ -92,7 +124,7 @@ const LikelyToHitCard = ({
         <p className="no-data">No players currently predicted for hits</p>
       )}
 
-      {/* Tooltips rendered outside card to avoid clipping */}
+      {/* Tooltips rendered outside card to avoid clipping - keep as is */}
       {activeTooltip && activeTooltip.startsWith('likely_hit_') && (
         <>
           {hitStreakData.likelyToGetHit.slice(0, 10).map((player) => {

@@ -4,11 +4,13 @@ import { createSafeId, positionTooltip, setupTooltipCloseHandler } from '../../u
 
 /**
  * DayOfWeekHitsCard - Shows players who perform best on specific days of the week
+ * Enhanced with integrated team logos
  */
 const DayOfWeekHitsCard = ({ 
   dayOfWeekHits,
   isLoading,
-  currentDate 
+  currentDate,
+  teams
 }) => {
   const [activeTooltip, setActiveTooltip] = useState(null);
 
@@ -51,9 +53,28 @@ const DayOfWeekHitsCard = ({
               const safeId = createSafeId(player.name, player.team);
               const tooltipId = `day_hit_${safeId}`;
               
+              // Get team logo URL if teams data is available
+              const teamAbbr = player.team;
+              const teamData = teams && teamAbbr ? teams[teamAbbr] : null;
+              const logoUrl = teamData ? teamData.logoUrl : null;
+              
               return (
                 <li key={index} className="player-item">
-                  <div className="player-rank">{index + 1}</div>
+                  <div className="player-rank">
+                    {logoUrl && (
+                      <>
+                        <img 
+                          src={logoUrl} 
+                          alt="" 
+                          className="rank-logo" 
+                          loading="lazy"
+                          aria-hidden="true"
+                        />
+                        <div className="rank-overlay"></div>
+                      </>
+                    )}
+                    <span className="rank-number">{index + 1}</span>
+                  </div>
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
                     <span className="player-team">{player.team}</span>
@@ -70,6 +91,17 @@ const DayOfWeekHitsCard = ({
                     <small>in {player.games} {dayOfWeekHits.dayOfWeek}s</small>
                     <small>({(player.hitRate * 100).toFixed(1)}%)</small>
                   </div>
+                  
+                  {/* Enhanced background logo */}
+                  {logoUrl && (
+                    <img 
+                      src={logoUrl} 
+                      alt="" 
+                      className="team-logo-bg" 
+                      loading="lazy"
+                      aria-hidden="true"
+                    />
+                  )}
                 </li>
               );
             })}
@@ -79,7 +111,7 @@ const DayOfWeekHitsCard = ({
         <p className="no-data">No {dayOfWeekHits.dayOfWeek} hit data available</p>
       )}
 
-      {/* Tooltips rendered outside card to avoid clipping */}
+      {/* Tooltips rendered outside card to avoid clipping - keep as is */}
       {activeTooltip && activeTooltip.startsWith('day_hit_') && (
         <>
           {dayOfWeekHits.topHitsByTotal.slice(0, 10).map((player) => {

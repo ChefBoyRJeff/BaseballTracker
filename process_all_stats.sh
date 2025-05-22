@@ -1,28 +1,35 @@
 #!/bin/bash
 
-# Directory containing the CSV files
-CSV_DIR="../BaseballScraper"
+# Paths to both current and archived CSVs
+BASE_DIR="../BaseballScraper/data"
+ARCHIVE_DIR="$BASE_DIR/archived_data"
 
-# Check if CSV_DIR exists and is a directory
-if [ ! -d "$CSV_DIR" ]; then
-    echo "Error: Directory '$CSV_DIR' not found."
-    exit 1
-fi
+# Function to process CSVs in a directory
+process_csv_dir() {
+    local DIR=$1
 
-echo "Looking for CSV files directly in: $CSV_DIR"
-
-# Find CSV files matching the pattern *only* in the specified directory
-# -maxdepth 1 prevents find from descending into subdirectories
-find "$CSV_DIR" -maxdepth 1 -name "*.csv" | while IFS= read -r file; do
-    # Check if it's actually a file (find might list the directory itself if it matches *.csv)
-    if [ -f "$file" ]; then
-        echo "Processing file: $file"
-        # Ensure the file path is quoted in case it contains spaces
-        node src/services/statLoader.js "$file"
-
-        # Optional: Add a small delay between files
-        sleep 0.1 # Reduced delay slightly, adjust as needed
+    if [ ! -d "$DIR" ]; then
+        echo "❌ Directory not found: $DIR"
+        return
     fi
-done
 
-echo "All stats files in '$CSV_DIR' have been processed."
+    echo "🔍 Looking for CSV files in: $DIR"
+
+    find "$DIR" -maxdepth 1 -name "*.csv" | while IFS= read -r file; do
+        if [ -f "$file" ]; then
+            echo "📄 Processing: $file"
+            node src/services/statLoader.js "$file"
+            sleep 0.1
+        fi
+    done
+}
+
+echo "========================================="
+echo "⚾ Processing current and archived CSV stats"
+echo "========================================="
+
+# Process both folders
+process_csv_dir "$BASE_DIR"
+process_csv_dir "$ARCHIVE_DIR"
+
+echo "✅ All stat files have been processed."

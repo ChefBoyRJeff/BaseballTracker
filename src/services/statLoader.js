@@ -57,7 +57,7 @@ function processHittingStats(csvRecords, teamAbbreviation) {
     const playersData = [];
     
     for (const record of csvRecords) {
-        const rawPlayerName = record.player || record.hitters; // Handle either column name
+        const rawPlayerName = record.name || record.player || record.hitters;
         
         // Skip the summary "team" row or empty rows
         if (!rawPlayerName || rawPlayerName.toLowerCase() === 'team') {
@@ -284,165 +284,150 @@ function createDirectoryIfNotExists(dirPath) {
  */
 function processStatsFile(csvFilePath) {
     console.log(`Processing stats file: ${csvFilePath}`);
-
-    // 1. Validate and Parse CSV Filename
     const csvFileName = path.basename(csvFilePath);
-    // Updated regex to match both TEAM_hitting_month_day_year.csv and TEAM_pitching_month_day_year.csv
+
+    // Try standard format: TEAM_[hitting|pitching]_month_day_year.csv
     let nameParts = csvFileName.match(/^([A-Z]{2,3})_(hitting|pitching)_(\w+)_(\d{1,2})_(\d{4})\.csv$/i);
 
-// If it doesn't match, try fallback format: e.g., player_stats_YYYY-MM-DD.csv or similar
-if (!nameParts) {
-    const altParts = csvFileName.match(/^(\w+?)_(stats|scores|players|standings)?_(\d{4})-(\d{2})-(\d{2})\.csv$/i);
-    if (altParts) {
-        // Normalize fallback values
-        const [, baseName, statKind, year, month, day] = altParts;
-        const fallbackStatType = (baseName.includes('pitch') || statKind === 'pitching') ? 'pitching' : 'hitting';
-        const fallbackTeam = 'MLB';
-        const monthStr = new Date(`${year}-${month}-${day}`).toLocaleString('default', { month: 'long' }).toLowerCase();
-        nameParts = [null, fallbackTeam, fallbackStatType, monthStr, day, year];
+    // Fallback for format like: player_stats_YYYY-MM-DD.csv
+    if (!nameParts) {
+        const altParts = csvFileName.match(/^([a-z_]+)_(\d{4})-(\d{2})-(\d{2})\.csv$/i);
+        if (altParts) {
+            const [, baseName, year, month, day] = altParts;
+            const fallbackStatType = baseName.includes('pitch') ? 'pitching' : 'hitting';
+            if (!baseName.includes('player') && !baseName.includes('stat') && !baseName.includes('pitch') && !baseName.includes('hit')) {
+                console.log(`ℹ️ Skipping non-player stats file: ${csvFileName}`);
+                return;
+            }
+            const fallbackTeam = 'MLB';
+            const monthStr = new Date(`${year}-${month}-${day}`).toLocaleString('default', { month: 'long' }).toLowerCase();
+            nameParts = [null, fallbackTeam, fallbackStatType, monthStr, day, year];
         }
     }
 
-
     if (!nameParts) {
-    console.error(`❌ Could not parse filename: ${csvFileName}`);
-    process.exit(1);
+        console.error(`❌ Could not parse filename: ${csvFileName}`);
+        return;
     }
-
 
     const [, teamAbbreviation, statType, month, day, year] = nameParts;
     const monthLower = month.toLowerCase();
-    // Ensure day is zero-padded if needed for consistency, though path.join handles it.
-    const dayPadded = day.padStart(2, '0');
-
-    console.log(`Parsed info: Team=${teamAbbreviation}, Type=${statType}, Year=${year}, Month=${monthLower}, Day=${dayPadded}`);
-
-    // 2. Construct Target JSON File Path
+    const dayPadded = day.toString().padStart(2, '0');
     const jsonFilePath = path.join(BASE_DATA_DIR, year, monthLower, `${monthLower}_${dayPadded}_${year}.json`);
+    console.log(`Parsed info: Team=${teamAbbreviation}, Type=${statType}, Year=${year}, Month=${monthLower}, Day=${dayPadded}`);
     console.log(`Target JSON file: ${jsonFilePath}`);
 
-    // 3. Check if JSON File Exists
     if (!fs.existsSync(jsonFilePath)) {
-        console.error(`Error: Target JSON file not found: "${jsonFilePath}". Please ensure the schedule generator has run for this date.`);
-        process.exit(1);
+        console.error(`Error: Target JSON file not found: "${jsonFilePath}".`);
+        return;
     }
 
-    // 4. Read and Parse CSV Data
     let csvRecords;
     try {
         const csvContent = fs.readFileSync(csvFilePath, 'utf8');
         csvRecords = parse(csvContent, {
-            columns: true,          // Use header row for keys
-            skip_empty_lines: true, // Ignore empty lines
-            trim: true              // Trim whitespace from values
+            columns: true,
+            skip_empty_lines: true,
+            trim: true,
+            relax_quotes: true,
+            relax_column_count: true,
+            skip_records_with_error: true
         });
     } catch (error) {
-        console.error(`Error reading or parsing CSV file "${csvFilePath}": ${error.message}`);
-        process.exit(1);
+        console.error(`Error reading CSV: ${error.message}`);
+        return;
     }
 
-    // 5. Process CSV Records into Player Stats Objects based on the file type
+    // Detect player info CSV (e.g., roster data)
+    const isPlayerInfoCsv = csvRecords.length > 0 && csvRecords[0].position && csvRecords[0].jersey && csvRecords[0].age;
     let playersData = [];
-    if (statType.toLowerCase() === 'hitting') {
+
+    if (isPlayerInfoCsv) {
+        playersData = csvRecords.map(p => ({
+            name: p.name,
+            team: teamAbbreviation,
+            position: p.position || '',
+            jersey: p.jersey || '',
+            height: p.height || '',
+            weight: p.weight || '',
+            age: p.age || '',
+            playerType: 'info'
+        }));
+        console.log(`Extracted ${playersData.length} player info records`);
+    } else if (statType.toLowerCase() === 'hitting') {
         playersData = processHittingStats(csvRecords, teamAbbreviation);
     } else if (statType.toLowerCase() === 'pitching') {
         playersData = processPitchingStats(csvRecords, teamAbbreviation);
     } else {
         console.error(`Unknown stat type: ${statType}`);
-        process.exit(1);
+        return;
     }
 
     if (playersData.length === 0) {
-        console.warn(`Warning: No valid player data found in CSV file "${csvFileName}".`);
-    } else {
-        console.log(`Extracted ${statType} stats for ${playersData.length} players.`);
+        console.warn(`⚠️ No valid player data found in "${csvFileName}".`);
     }
 
-    // 6. Read Existing JSON Data
     let jsonData;
     try {
         const jsonContent = fs.readFileSync(jsonFilePath, 'utf8');
         jsonData = JSON.parse(jsonContent);
     } catch (error) {
-        console.error(`Error reading or parsing JSON file "${jsonFilePath}": ${error.message}`);
-        process.exit(1);
+        console.error(`Error reading JSON file: ${error.message}`);
+        return;
     }
 
-    // 7. Update JSON Data - Merging with existing players
-    if (!jsonData.players) {
-        jsonData.players = [];
-    }
-    
-    // If there are already players in the file, we need to merge the data
-    const existingPlayers = jsonData.players;
-    
+    if (!jsonData.players) jsonData.players = [];
+
     for (const newPlayer of playersData) {
-        // For each new player, check if they already exist in the file
-        const existingPlayerIndex = existingPlayers.findIndex(
-            p => p.name === newPlayer.name && p.team === newPlayer.team && 
-                 (p.playerType === newPlayer.playerType || (!p.playerType && statType.toLowerCase() === 'hitting'))
+        const idx = jsonData.players.findIndex(
+            p => p.name === newPlayer.name && p.team === newPlayer.team &&
+                (p.playerType === newPlayer.playerType || !p.playerType)
         );
-        
-        if (existingPlayerIndex >= 0) {
-            // Update existing player
-            console.log(`Updating stats for existing player: ${newPlayer.name}`);
-            existingPlayers[existingPlayerIndex] = { 
-                ...existingPlayers[existingPlayerIndex], 
-                ...newPlayer 
-            };
+        if (idx >= 0) {
+            console.log(`Updating player: ${newPlayer.name}`);
+            jsonData.players[idx] = { ...jsonData.players[idx], ...newPlayer };
         } else {
-            // Add new player
             console.log(`Adding new player: ${newPlayer.name}`);
-            existingPlayers.push(newPlayer);
+            jsonData.players.push(newPlayer);
         }
     }
-    
-    // Update the players array in the JSON data
-    jsonData.players = existingPlayers;
-    
-    console.log(`JSON now contains ${jsonData.players.length} total players`);
 
-    // 8. NEW: Update game scores based on player statistics
+    console.log(`JSON now contains ${jsonData.players.length} total players`);
     console.log("Starting game score update process...");
-    
-    // Get a list of teams playing today
+
     const teamsPlayingToday = new Set();
     if (jsonData.games && jsonData.games.length > 0) {
         jsonData.games.forEach(game => {
             teamsPlayingToday.add(game.homeTeam);
             teamsPlayingToday.add(game.awayTeam);
         });
-        console.log(`Teams scheduled to play: ${Array.from(teamsPlayingToday).join(', ')}`);
+        console.log(`Teams scheduled: ${Array.from(teamsPlayingToday).join(', ')}`);
     }
-    
-    // Check if we're processing a team that's playing today
+
     if (teamsPlayingToday.has(teamAbbreviation)) {
-        console.log(`Processing stats for ${teamAbbreviation}, which has a game scheduled for today`);
+        console.log(`Processing stats for team with a scheduled game: ${teamAbbreviation}`);
     }
-    
-    // Update game scores
+
     jsonData = updateGameScores(jsonData, jsonData.players);
 
-    // 9. Write Updated JSON Data Back to File
     try {
         fs.writeFileSync(jsonFilePath, JSON.stringify(jsonData, null, 2));
-        console.log(`Successfully updated JSON file: "${jsonFilePath}"`);
+        console.log(`✅ Updated JSON file: ${jsonFilePath}`);
     } catch (error) {
-        console.error(`Error writing updated JSON file "${jsonFilePath}": ${error.message}`);
-        process.exit(1);
+        console.error(`Error writing updated JSON: ${error.message}`);
     }
 }
 
-// --- Script Execution ---
 
-// Get CSV file path from command line arguments
-const args = process.argv.slice(2); // Skip 'node' and script name
+
+// --- Script Execution ---
+const args = process.argv.slice(2);
 if (args.length !== 1) {
     console.error('Usage: node statLoader.js <path_to_csv_file>');
     process.exit(1);
 }
 
-const csvFilePath = args[0];
+const csvFilePath = args[0]; // ✅ You must declare this!
 
 // Validate if the provided path is a file
 try {

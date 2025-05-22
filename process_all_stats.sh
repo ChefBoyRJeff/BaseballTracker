@@ -1,35 +1,33 @@
 #!/bin/bash
 
-# Paths to both current and archived CSVs
-BASE_DIR="../BaseballScraper/data"
-ARCHIVE_DIR="$BASE_DIR/archived_data"
+# Directories to search
+LIVE_CSV_DIR="../BaseballScraper/data"
+ARCHIVE_CSV_DIR="../BaseballScraper/data/archived_data"
 
-# Function to process CSVs in a directory
-process_csv_dir() {
-    local DIR=$1
+# Check that both directories exist
+if [ ! -d "$LIVE_CSV_DIR" ]; then
+    echo "❌ Error: Live data directory '$LIVE_CSV_DIR' not found."
+    exit 1
+fi
 
-    if [ ! -d "$DIR" ]; then
-        echo "❌ Directory not found: $DIR"
-        return
-    fi
+if [ ! -d "$ARCHIVE_CSV_DIR" ]; then
+    echo "❌ Error: Archived data directory '$ARCHIVE_CSV_DIR' not found."
+    exit 1
+fi
 
-    echo "🔍 Looking for CSV files in: $DIR"
+echo "📦 Processing CSVs from:"
+echo "  ➤ $LIVE_CSV_DIR"
+echo "  ➤ $ARCHIVE_CSV_DIR"
 
+# Combine both directories into a loop
+for DIR in "$LIVE_CSV_DIR" "$ARCHIVE_CSV_DIR"; do
     find "$DIR" -maxdepth 1 -name "*.csv" | while IFS= read -r file; do
         if [ -f "$file" ]; then
-            echo "📄 Processing: $file"
+            echo "📄 Processing file: $file"
             node src/services/statLoader.js "$file"
             sleep 0.1
         fi
     done
-}
+done
 
-echo "========================================="
-echo "⚾ Processing current and archived CSV stats"
-echo "========================================="
-
-# Process both folders
-process_csv_dir "$BASE_DIR"
-process_csv_dir "$ARCHIVE_DIR"
-
-echo "✅ All stat files have been processed."
+echo "✅ All stats files in '$LIVE_CSV_DIR' and '$ARCHIVE_CSV_DIR' have been processed."

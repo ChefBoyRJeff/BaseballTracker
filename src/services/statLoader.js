@@ -288,12 +288,27 @@ function processStatsFile(csvFilePath) {
     // 1. Validate and Parse CSV Filename
     const csvFileName = path.basename(csvFilePath);
     // Updated regex to match both TEAM_hitting_month_day_year.csv and TEAM_pitching_month_day_year.csv
-    const nameParts = csvFileName.match(/^([A-Z]{2,3})_(hitting|pitching)_(\w+)_(\d{1,2})_(\d{4})\.csv$/i);
+    let nameParts = csvFileName.match(/^([A-Z]{2,3})_(hitting|pitching)_(\w+)_(\d{1,2})_(\d{4})\.csv$/i);
+
+// If it doesn't match, try fallback format: e.g., player_stats_YYYY-MM-DD.csv or similar
+if (!nameParts) {
+    const altParts = csvFileName.match(/^(\w+?)_(stats|scores|players|standings)?_(\d{4})-(\d{2})-(\d{2})\.csv$/i);
+    if (altParts) {
+        // Normalize fallback values
+        const [, baseName, statKind, year, month, day] = altParts;
+        const fallbackStatType = (baseName.includes('pitch') || statKind === 'pitching') ? 'pitching' : 'hitting';
+        const fallbackTeam = 'MLB';
+        const monthStr = new Date(`${year}-${month}-${day}`).toLocaleString('default', { month: 'long' }).toLowerCase();
+        nameParts = [null, fallbackTeam, fallbackStatType, monthStr, day, year];
+        }
+    }
+
 
     if (!nameParts) {
-        console.error(`Error: Invalid CSV filename format: "${csvFileName}". Expected format: TEAM_[hitting|pitching]_month_day_year.csv (e.g., ARI_hitting_april_24_2025.csv)`);
-        process.exit(1);
+    console.error(`❌ Could not parse filename: ${csvFileName}`);
+    process.exit(1);
     }
+
 
     const [, teamAbbreviation, statType, month, day, year] = nameParts;
     const monthLower = month.toLowerCase();

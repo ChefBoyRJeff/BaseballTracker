@@ -13,7 +13,7 @@ const path = require('path');
 
 // Configuration
 const ROSTER_PATH = path.join(__dirname, '../../public/data/rosters.json');
-const SEASON_DATA_DIR = path.join(__dirname, '../../public/data/2025');
+const SEASON_ROOT_DIR = path.join(__dirname, '../../public/data');
 const OUTPUT_DIR = path.join(__dirname, '../../public/data/predictions');
 const HR_DEFICIT_THRESHOLD = 2.5; // Threshold for HR deficit to be considered "due"
 const INACTIVITY_THRESHOLD_DAYS = 10; // Player is inactive if no game played in last X days
@@ -137,55 +137,51 @@ function findMostRecentDataFile(targetDate) {
 }
 
 /**
- * Load all season data (to find game history)
+ * Load all season + historical data
  */
 function loadAllSeasonData() {
-  console.log('[loadAllSeasonData] Loading season data...');
-  const seasonData = {};
+  console.log('[loadAllSeasonData] Loading all available season data...');
+  const fullData = {};
 
-  if (!fs.existsSync(SEASON_DATA_DIR)) {
-    console.error(`[loadAllSeasonData] CRITICAL: SEASON_DATA_DIR does not exist: ${SEASON_DATA_DIR}`);
-    return seasonData;
+  if (!fs.existsSync(SEASON_ROOT_DIR)) {
+    console.error(`[loadAllSeasonData] CRITICAL: SEASON_ROOT_DIR does not exist: ${SEASON_ROOT_DIR}`);
+    return fullData;
   }
 
-  const monthDirs = fs.readdirSync(SEASON_DATA_DIR, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => dirent.name);
-  console.log(`[loadAllSeasonData] Found month directories: ${monthDirs.join(', ')}`);
+  const yearDirs = fs.readdirSync(SEASON_ROOT_DIR, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory() && /^\d{4}$/.test(dirent.name))
+    .map(dirent => dirent.name)
+    .sort(); // Ensure ascending year order
 
-  monthDirs.forEach(monthDirName => {
-    const monthDirPath = path.join(SEASON_DATA_DIR, monthDirName);
-    const files = fs.readdirSync(monthDirPath)
-      .filter(file => file.endsWith('.json') && file.startsWith(monthDirName + '_'));
-    
-    for (const file of files) {
-      const filePath = path.join(monthDirPath, file);
-      const data = readJsonFile(filePath);
-      
-      if (data) {
-        const parts = file.replace('.json', '').split('_');
-        if (parts.length === 3) { 
-          const fileMonthName = parts[0];
-          const day = parts[1].padStart(2, '0');
-          const year = parts[2];
-          
-          const tempDate = new Date(`${fileMonthName} 1, ${year}`); 
-          if (isNaN(tempDate.getTime())) {
-            console.warn(`[loadAllSeasonData] Could not parse month from filename: ${file} (Month: ${fileMonthName})`);
-            continue;
-          }
-          const monthNumStr = String(tempDate.getMonth() + 1).padStart(2, '0');
-          const dateKey = `${year}-${monthNumStr}-${day}`;
-          seasonData[dateKey] = data;
-        } else {
-            console.warn(`[loadAllSeasonData] Filename ${file} in ${monthDirPath} does not match expected format monthname_DD_YYYY.json`);
+  for (const year of yearDirs) {
+    const yearPath = path.join(SEASON_ROOT_DIR, year);
+    const monthDirs = fs.readdirSync(yearPath, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => d.name);
+
+    for (const month of monthDirs) {
+      const monthPath = path.join(yearPath, month);
+      const files = fs.readdirSync(monthPath)
+        .filter(f => f.endsWith('.json') && f.startsWith(month + '_'));
+
+      for (const file of files) {
+        const filePath = path.join(monthPath, file);
+        const gameData = readJsonFile(filePath);
+        if (!gameData) continue;
+
+        const [mName, day, y] = file.replace('.json', '').split('_');
+        const date = new Date(`${mName} ${day}, ${y}`);
+        if (!isNaN(date)) {
+          const monthNumStr = String(date.getMonth() + 1).padStart(2, '0');
+          const dateKey = `${y}-${monthNumStr}-${day.padStart(2, '0')}`;
+          fullData[dateKey] = gameData;
         }
       }
     }
-  });
+  }
 
-  console.log(`[loadAllSeasonData] Loaded data for ${Object.keys(seasonData).length} dates`);
-  return seasonData;
+  console.log(`[loadAllSeasonData] Loaded data for ${Object.keys(fullData).length} total dates across all years.`);
+  return fullData;
 }
 
 /**

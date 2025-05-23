@@ -291,19 +291,33 @@ function processStatsFile(csvFilePath) {
 
     // Fallback for format like: player_stats_YYYY-MM-DD.csv
     if (!nameParts) {
-        const altParts = csvFileName.match(/^([a-z_]+)_(\d{4})-(\d{2})-(\d{2})\.csv$/i);
-        if (altParts) {
-            const [, baseName, year, month, day] = altParts;
-            const fallbackStatType = baseName.includes('pitch') ? 'pitching' : 'hitting';
-            if (!baseName.includes('player') && !baseName.includes('stat') && !baseName.includes('pitch') && !baseName.includes('hit')) {
-                console.log(`ℹ️ Skipping non-player stats file: ${csvFileName}`);
-                return;
-            }
+    // Match format: player_stats_YYYY-MM-DD.csv
+    const altParts = csvFileName.match(/^([a-z_]+)_(\d{4})-(\d{2})-(\d{2})\.csv$/i);
+    if (altParts) {
+        const [, baseName, year, month, day] = altParts;
+        const fallbackStatType = baseName.includes('pitch') ? 'pitching' : 'hitting';
+        if (!baseName.includes('player') && !baseName.includes('stat') && !baseName.includes('pitch') && !baseName.includes('hit')) {
+            console.log(`ℹ️ Skipping non-player stats file: ${csvFileName}`);
+            return;
+        }
+        const fallbackTeam = 'MLB';
+        const monthStr = new Date(`${year}-${month}-${day}`).toLocaleString('default', { month: 'long' }).toLowerCase();
+        nameParts = [null, fallbackTeam, fallbackStatType, monthStr, day, year];
+    }
+    // Match format: historical_stats_YYYY.csv
+    else {
+        const histParts = csvFileName.match(/^historical_stats_(\d{4})\.csv$/i);
+        if (histParts) {
+            const [_, year] = histParts;
             const fallbackTeam = 'MLB';
-            const monthStr = new Date(`${year}-${month}-${day}`).toLocaleString('default', { month: 'long' }).toLowerCase();
-            nameParts = [null, fallbackTeam, fallbackStatType, monthStr, day, year];
+            const fallbackStatType = 'hitting';
+            const month = 'january';
+            const day = '01';
+            nameParts = [null, fallbackTeam, fallbackStatType, month, day, year];
+            }
         }
     }
+
 
     if (!nameParts) {
         console.error(`❌ Could not parse filename: ${csvFileName}`);
@@ -313,14 +327,30 @@ function processStatsFile(csvFilePath) {
     const [, teamAbbreviation, statType, month, day, year] = nameParts;
     const monthLower = month.toLowerCase();
     const dayPadded = day.toString().padStart(2, '0');
-    const jsonFilePath = path.join(BASE_DATA_DIR, year, monthLower, `${monthLower}_${dayPadded}_${year}.json`);
+    const isHistorical = csvFileName.startsWith('historical_stats_');
+    const jsonFilePath = isHistorical
+    ? path.join(BASE_DATA_DIR, 'historical', `historical_data_${year}.json`)
+    : path.join(BASE_DATA_DIR, year, monthLower, `${monthLower}_${dayPadded}_${year}.json`);
+
     console.log(`Parsed info: Team=${teamAbbreviation}, Type=${statType}, Year=${year}, Month=${monthLower}, Day=${dayPadded}`);
     console.log(`Target JSON file: ${jsonFilePath}`);
 
     if (!fs.existsSync(jsonFilePath)) {
-        console.error(`Error: Target JSON file not found: "${jsonFilePath}".`);
-        return;
+    console.warn(`⚠️ Target JSON file not found: "${jsonFilePath}". Creating new JSON structure.`);
+
+    const jsonDir = path.dirname(jsonFilePath);
+    if (!fs.existsSync(jsonDir)) {
+        fs.mkdirSync(jsonDir, { recursive: true });
     }
+
+    const initialJson = {
+        players: [],
+        games: []
+    };
+
+    fs.writeFileSync(jsonFilePath, JSON.stringify(initialJson, null, 2));
+    }
+
 
     let csvRecords;
     try {
@@ -386,15 +416,22 @@ function processStatsFile(csvFilePath) {
         if (idx >= 0) {
             console.log(`Updating player: ${newPlayer.name}`);
             jsonData.players[idx] = { ...jsonData.players[idx], ...newPlayer };
+            if (isHistorical) jsonData.players[idx].isHistorical = true;
         } else {
             console.log(`Adding new player: ${newPlayer.name}`);
-            jsonData.players.push(newPlayer);
+            if (isHistorical) {
+                newPlayer.isHistorical = true;
+        }
+        jsonData.players.push(newPlayer);
         }
     }
 
     console.log(`JSON now contains ${jsonData.players.length} total players`);
-    console.log("Starting game score update process...");
 
+    if (isHistorical) {
+    console.log("🕰️ Historical file detected — skipping game score update process.");
+    } else {
+    console.log("Starting game score update process...");
     const teamsPlayingToday = new Set();
     if (jsonData.games && jsonData.games.length > 0) {
         jsonData.games.forEach(game => {
@@ -409,6 +446,8 @@ function processStatsFile(csvFilePath) {
     }
 
     jsonData = updateGameScores(jsonData, jsonData.players);
+    }
+
 
     try {
         fs.writeFileSync(jsonFilePath, JSON.stringify(jsonData, null, 2));

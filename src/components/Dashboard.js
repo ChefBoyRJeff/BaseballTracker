@@ -483,69 +483,74 @@ function Dashboard({ playerData, teamData, gameData, currentDate }) {
           setDataDate(currentDate);
           setDateStatus('current');
         } else {
-          // Try to load previous day's data specifically
+                    // Try to load previous day's data specifically
           const yesterday = new Date(currentDate);
           yesterday.setDate(yesterday.getDate() - 1);
           const yesterdayYear = yesterday.getFullYear();
           const yesterdayMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
           const yesterdayDay = String(yesterday.getDate()).padStart(2, '0');
           const yesterdayDateStr = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`;
-          
+
           try {
             const response = await fetch(`/data/${yesterdayYear}/${yesterdayMonth}/${yesterdayDay}/daily_stats.json`);
             
             if (response.ok) {
-              const data = await response.json();
-              if (data.players && data.players.length > 0) {
-                // Process previous day data with filtering
-                let filteredPrevDayPlayers = data.players;
-                
-                if (isFiltering) {
-                  filteredPrevDayPlayers = filteredPrevDayPlayers.filter(player => 
-                    shouldIncludePlayer(player.team)
+              const contentType = response.headers.get("content-type");
+              if (!contentType || !contentType.includes("application/json")) {
+                console.warn(`⚠️ Received non-JSON content for ${yesterdayDateStr}, skipping`);
+              } else {
+                const data = await response.json();
+                if (data.players && data.players.length > 0) {
+                  let filteredPrevDayPlayers = data.players;
+
+                  if (isFiltering) {
+                    filteredPrevDayPlayers = filteredPrevDayPlayers.filter(player => 
+                      shouldIncludePlayer(player.team)
+                    );
+                  }
+
+                  const batters = filteredPrevDayPlayers.filter(player => 
+                    player.playerType === 'hitter' || !player.playerType
                   );
+
+                  const pitchers = filteredPrevDayPlayers.filter(player => 
+                    player.playerType === 'pitcher'
+                  );
+
+                  const topHitters = [...batters]
+                    .filter(player => player.H !== 'DNP' && player.H !== null)
+                    .sort((a, b) => (Number(b.H) || 0) - (Number(a.H) || 0))
+                    .slice(0, 25);
+
+                  const topHomers = [...batters]
+                    .filter(player => player.HR !== 'DNP' && player.HR !== null && Number(player.HR) > 0)
+                    .sort((a, b) => (Number(b.HR) || 0) - (Number(a.HR) || 0))
+                    .slice(0, 25);
+
+                  const topStrikeoutPitchers = [...pitchers]
+                    .filter(player => player.K !== 'DNP' && player.K !== null)
+                    .sort((a, b) => (Number(b.K) || 0) - (Number(a.K) || 0))
+                    .slice(0, 25);
+
+                  setRollingStats({
+                    hitters: topHitters.map(player => ({...player, games: 1})),
+                    homers: topHomers.map(player => ({...player, games: 1})),
+                    strikeouts: topStrikeoutPitchers.map(player => ({...player, games: 1}))
+                  });
+
+                  setDataDate(yesterday);
+                  setDateStatus('previous');
+                  setStatsLoading(false);
+                  return;
                 }
-                
-                const batters = filteredPrevDayPlayers.filter(player => 
-                  player.playerType === 'hitter' || !player.playerType);
-                
-                const pitchers = filteredPrevDayPlayers.filter(player => 
-                  player.playerType === 'pitcher');
-                
-                // Find top performers in previous day data
-                const topHitters = [...batters]
-                  .filter(player => player.H !== 'DNP' && player.H !== null)
-                  .sort((a, b) => (Number(b.H) || 0) - (Number(a.H) || 0))
-                  .slice(0, 25);
-                
-                const topHomers = [...batters]
-                  .filter(player => player.HR !== 'DNP' && player.HR !== null && Number(player.HR) > 0)
-                  .sort((a, b) => (Number(b.HR) || 0) - (Number(a.HR) || 0))
-                  .slice(0, 25);
-                
-                const topStrikeoutPitchers = [...pitchers]
-                  .filter(player => player.K !== 'DNP' && player.K !== null)
-                  .sort((a, b) => (Number(b.K) || 0) - (Number(a.K) || 0))
-                  .slice(0, 25);
-                
-                setRollingStats({
-                  hitters: topHitters.map(player => ({...player, games: 1})),
-                  homers: topHomers.map(player => ({...player, games: 1})),
-                  strikeouts: topStrikeoutPitchers.map(player => ({...player, games: 1}))
-                });
-                
-                // Set data date and status
-                setDataDate(yesterday);
-                setDateStatus('previous');
-                
-                // Exit early since we found yesterday's data
-                setStatsLoading(false);
-                return;
               }
+            } else {
+              console.warn(`⚠️ Failed to fetch previous day stats: ${response.status}`);
             }
           } catch (e) {
-            console.warn(`Could not load previous day data: ${e.message}`);
+            console.warn(`❌ Could not load previous day data: ${e.message}`);
           }
+
           
           // If we get here, we couldn't load yesterday's data, so fall back to more historical data
           loadHistoricalStats();

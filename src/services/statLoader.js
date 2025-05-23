@@ -20,56 +20,34 @@ const { parse } = require('csv-parse/sync'); // Using sync parser for simplicity
 const BASE_DATA_DIR = path.join('public', 'data');
 // --- End Configuration ---
 
-/**
- * Cleans player name by removing potential trailing position abbreviations.
- * Handles cases like "X. EdwardsSS", "J. SánchezCF-RF", "aD. MyersPH-CF".
- * @param {string} rawName - The name string from the CSV (e.g., "X. EdwardsSS")
- * @returns {string} The cleaned player name (e.g., "X. Edwards")
- */
 function cleanPlayerName(rawName) {
     if (!rawName) return '';
-    // Remove trailing sequences of uppercase letters, numbers, and hyphens (common position indicators)
-    // This regex attempts to remove common patterns like SS, CF, RF, PH-CF, PR-3B, 1B etc. from the end.
-    // It's not perfect for all edge cases but covers many common baseball notations.
     const cleaned = rawName.replace(/[A-Z0-9\-]+$/, '').trim();
-    // Handle potential leading indicators like 'a' for pinch hitter, 'b' etc. if needed
     return cleaned;
 }
 
-/**
- * Parses the stat value, ensuring it's a number.
- * @param {string} value - The stat value from the CSV.
- * @returns {number} The parsed number, or 0 if parsing fails.
- */
 function parseStat(value) {
     if (value === undefined || value === null || value === '') return 0;
     const num = parseFloat(value);
     return isNaN(num) ? 0 : num;
 }
 
-/**
- * Process hitting stats from a CSV file
- * @param {Array} csvRecords - The parsed CSV records
- * @param {string} teamAbbreviation - The team abbreviation
- * @returns {Array} Array of player hitting stats
- */
 function processHittingStats(csvRecords, teamAbbreviation) {
     const playersData = [];
-    
+
     for (const record of csvRecords) {
         const rawPlayerName = record.name || record.player || record.hitters;
-        
-        // Skip the summary "team" row or empty rows
+
         if (!rawPlayerName || rawPlayerName.toLowerCase() === 'team') {
             continue;
         }
-        
+
         const playerName = cleanPlayerName(rawPlayerName);
         if (!playerName) {
             console.warn(`Could not extract player name from: "${rawPlayerName}". Skipping row.`);
             continue;
         }
-        
+
         const playerStats = {
             name: playerName,
             team: teamAbbreviation.toUpperCase(),
@@ -85,54 +63,10 @@ function processHittingStats(csvRecords, teamAbbreviation) {
             OBP: parseFloat(record.obp || record.OBP || 0).toFixed(3),
             SLG: parseFloat(record.slg || record.SLG || 0).toFixed(3)
         };
-        
-        playersData.push(playerStats);
-    }
-    
-    return playersData;
-}
 
-/**
- * Process pitching stats from a CSV file
- * @param {Array} csvRecords - The parsed CSV records
- * @param {string} teamAbbreviation - The team abbreviation
- * @returns {Array} Array of player pitching stats
- */
-function processPitchingStats(csvRecords, teamAbbreviation) {
-    const playersData = [];
-    
-    for (const record of csvRecords) {
-        const rawPlayerName = record.player || record.pitchers; // Handle either column name
-        
-        // Skip the summary "team" row or empty rows
-        if (!rawPlayerName || rawPlayerName.toLowerCase() === 'team') {
-            continue;
-        }
-        
-        const playerName = cleanPlayerName(rawPlayerName);
-        if (!playerName) {
-            console.warn(`Could not extract player name from: "${rawPlayerName}". Skipping row.`);
-            continue;
-        }
-        
-        const playerStats = {
-            name: playerName,
-            team: teamAbbreviation.toUpperCase(),
-            playerType: 'pitcher',
-            IP: parseStat(record.ip || record.IP),
-            H: parseStat(record.h || record.H),
-            R: parseStat(record.r || record.R),
-            ER: parseStat(record.er || record.ER),
-            BB: parseStat(record.bb || record.BB),
-            K: parseStat(record.k || record.K),
-            HR: parseStat(record.hr || record.HR),
-            PC_ST: record.pc_st || record.PC_ST || '',
-            ERA: parseFloat(record.era || record.ERA || 0).toFixed(2)
-        };
-        
         playersData.push(playerStats);
     }
-    
+
     return playersData;
 }
 

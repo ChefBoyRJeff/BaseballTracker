@@ -14,7 +14,9 @@ const path = require('path');
 // Configuration
 const ROSTER_PATH = path.join(__dirname, '../../public/data/rosters.json');
 const SEASON_DATA_DIR = path.join(__dirname, '../../public/data/2025');
+const HISTORICAL_DATA_DIR = path.join(__dirname, '../../public/data/historical');
 const OUTPUT_DIR = path.join(__dirname, '../../public/data/predictions');
+
 
 /**
  * Read JSON file
@@ -104,6 +106,43 @@ function loadAllSeasonData() {
   return seasonData;
 }
 
+/**
+ * Load all historical data
+ */
+function loadHistoricalData() {
+  console.log('[loadHistoricalData] Loading historical archive data...');
+  const historicalData = {};
+
+  if (!fs.existsSync(HISTORICAL_DATA_DIR)) {
+    console.warn(`[loadHistoricalData] Archive directory does not exist: ${HISTORICAL_DATA_DIR}`);
+    return historicalData;
+  }
+
+  const files = fs.readdirSync(HISTORICAL_DATA_DIR).filter(f => f.endsWith('.json'));
+
+  for (const file of files) {
+    const filePath = path.join(HISTORICAL_DATA_DIR, file);
+    const yearMatch = file.match(/(\d{4})/);
+    if (!yearMatch) continue;
+
+    const year = yearMatch[1];
+    const data = readJsonFile(filePath);
+    if (data && data.players) {
+      data.players.forEach(player => {
+        if (!player.date || !player.name) return;
+
+        const dateKey = player.date;  // Expect format: YYYY-MM-DD
+        if (!historicalData[dateKey]) {
+          historicalData[dateKey] = { players: [] };
+        }
+        historicalData[dateKey].players.push(player);
+      });
+    }
+  }
+
+  console.log(`[loadHistoricalData] Loaded ${Object.keys(historicalData).length} historical date entries`);
+  return historicalData;
+}
 
 /**
  * Generate player performance data including recent home runs
@@ -122,18 +161,20 @@ async function generatePlayerPerformance(targetDate = new Date()) {
   // Load all season data
   console.log('[generatePlayerPerformance] Loading all season data...');
   const seasonData = loadAllSeasonData();
-  
+  const historicalData = loadHistoricalData();
+  const combinedData = { ...historicalData, ...seasonData };
+
   console.log('[generatePlayerPerformance] Analyzing player performance...');
   
   // Create a map to store player data
   const playerMap = new Map();
   
   // Get all dates and sort them chronologically
-  const allDates = Object.keys(seasonData).sort();
+  const allDates = Object.keys(combinedData).sort();
   
   // Process each game date to build player stats
   allDates.forEach(dateKey => {
-    const gameData = seasonData[dateKey];
+    const gameData = combinedData[dateKey];
     const gameDate = new Date(dateKey);
     
     if (gameData.players) {
@@ -259,6 +300,9 @@ async function generateDayOfWeekHitLeaders(targetDate = new Date()) {
   // Load all season data
   console.log('[generateDayOfWeekHitLeaders] Loading all season data...');
   const seasonData = loadAllSeasonData();
+  const historicalData = loadHistoricalData();
+  const combinedData = { ...historicalData, ...seasonData };
+
   
   // Get target day of week
   const targetDayOfWeek = targetDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
@@ -271,10 +315,11 @@ async function generateDayOfWeekHitLeaders(targetDate = new Date()) {
   const playerHitsMap = new Map();
   
   // Process all game data
-  Object.keys(seasonData).forEach(dateKey => {
+  Object.keys(combinedData).forEach(dateKey => {
     const date = new Date(dateKey);
     const dayOfWeek = date.getDay();
-    
+    const gameData = combinedData[dateKey];
+
     // Only process data for the target day of week
     if (dayOfWeek === targetDayOfWeek) {
       const gameData = seasonData[dateKey];
@@ -376,6 +421,9 @@ async function generateHitStreakAnalysis(targetDate = new Date()) {
   // Load all season data
   console.log('[generateHitStreakAnalysis] Loading all season data...');
   const seasonData = loadAllSeasonData();
+  const historicalData = loadHistoricalData();
+  const combinedData = { ...historicalData, ...seasonData };
+
   
   console.log('[generateHitStreakAnalysis] Analyzing hitting streaks...');
   
@@ -383,11 +431,11 @@ async function generateHitStreakAnalysis(targetDate = new Date()) {
   const playerGameHistoryMap = new Map();
   
   // Get all dates and sort them chronologically
-  const allDates = Object.keys(seasonData).sort();
+  const allDates = Object.keys(combinedData).sort();
   
   // Process each game date to build player histories
   allDates.forEach(dateKey => {
-    const gameData = seasonData[dateKey];
+    const gameData = combinedData[dateKey];
     
     if (gameData.players) {
       gameData.players.forEach(player => {

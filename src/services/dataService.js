@@ -430,72 +430,6 @@ export const fetchGameData = async (dateStr) => {
 };
 
 /**
- * Save player statistics for a specific date
- * @param {string} dateStr - Date string in 'YYYY-MM-DD' format
- * @param {Array} playerData - Array of player statistics
- * @returns {Promise<boolean>} Success indicator
- */
-export const savePlayerData = async (dateStr, playerData) => {
-  try {
-    // In a real application, this would send data to a server
-    // For this demo, we'll just update the cache
-    
-    // First, load the existing data
-    const existingData = await fetchPlayerData(dateStr);
-    
-    // Merge new data with existing data
-    const updatedPlayersData = [...existingData];
-    
-    playerData.forEach(newPlayer => {
-      const index = updatedPlayersData.findIndex(p => p.name === newPlayer.name);
-      if (index >= 0) {
-        // Update existing player
-        updatedPlayersData[index] = {...updatedPlayersData[index], ...newPlayer};
-      } else {
-        // Add new player
-        updatedPlayersData.push(newPlayer);
-      }
-    });
-    
-    // Update cache
-    dataCache.players[dateStr] = updatedPlayersData;
-    
-    // In a real app, you would save to server here
-    console.log(`Player data for ${dateStr} updated successfully`);
-    
-    return true;
-  } catch (error) {
-    console.error(`Error saving player data for ${dateStr}:`, error);
-      if (!response.ok) {
-    // Try to find closest date with data
-    const closestDate = await findClosestDateWithData(dateStr);
-    return false;
-  }
-};
-
-/**
- * Fetch complete player roster
- * @returns {Promise<Array>} Array of all available players
- */
-export const fetchRosterData = async () => {
-  try {
-    console.log('Loading roster data from: /data/rosters.json');
-    const response = await fetch('/data/rosters.json');
-    
-    if (!response.ok) {
-      console.error(`Failed to load roster data: ${response.status} ${response.statusText}`);
-      return [];
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error fetching roster data:', error);
-    return [];
-  }
-};
-
-/**
  * Clear data cache
  */
 export const clearCache = () => {
@@ -504,4 +438,5 @@ export const clearCache = () => {
   dataCache.games = {};
   dataCache.dateRangeData = {};
   dataCache.multiGameData = {};
+  console.log('Data cache cleared');
 };

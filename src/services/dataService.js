@@ -124,6 +124,12 @@ export const fetchPlayerData = async (dateStr) => {
       
       if (closestDate) {
         console.log(`No data found for ${dateStr}, using closest available date: ${closestDate}`);
+            // Fallback: check historical data for the same year
+        const historicalFallback = await fetchHistoricalDataFallback(dateStr);
+        if (historicalFallback.length > 0) {
+          dataCache.players[dateStr] = historicalFallback;
+      return historicalFallback;
+        }
         return fetchPlayerData(closestDate);
       }
       
@@ -323,6 +329,37 @@ export const findMultiGamePlayerStats = (dateRangeData, playerName, teamAbbr, nu
 };
 
 /**
+ * NEW: Load historical fallback data if daily data is missing
+ * @param {string} dateStr - Date in YYYY-MM-DD format
+ * @returns {Promise<Array>} Array of player data
+ */
+export const fetchHistoricalDataFallback = async (dateStr) => {
+  const [year] = dateStr.split('-');
+  const historicalPath = `/data/historical/historical_data_${year}.json`;
+
+  try {
+    console.log(`[DataService] Attempting to load historical fallback data from ${historicalPath}`);
+    const response = await fetch(historicalPath);
+    if (!response.ok) {
+      console.warn(`[DataService] Historical fallback file not found: ${historicalPath}`);
+      return DEFAULT_PLAYER_DATA;
+    }
+
+    const data = await response.json();
+    if (Array.isArray(data.players)) {
+      console.log(`[DataService] Loaded ${data.players.length} players from historical_data_${year}.json`);
+      return data.players;
+    }
+
+    return DEFAULT_PLAYER_DATA;
+  } catch (error) {
+    console.error(`[DataService] Failed to load historical fallback for ${dateStr}:`, error);
+    return DEFAULT_PLAYER_DATA;
+  }
+};
+
+
+/**
  * Fetch team data (doesn't change often)
  * @returns {Promise<Object>} Team data object
  */
@@ -429,6 +466,9 @@ export const savePlayerData = async (dateStr, playerData) => {
     return true;
   } catch (error) {
     console.error(`Error saving player data for ${dateStr}:`, error);
+      if (!response.ok) {
+    // Try to find closest date with data
+    const closestDate = await findClosestDateWithData(dateStr);
     return false;
   }
 };
